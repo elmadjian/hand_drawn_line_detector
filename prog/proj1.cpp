@@ -22,7 +22,7 @@ gft::CImage::CImage *ViewPaths(gft::Image32::Image32 *img,
   return paths;
 }
 
-  
+
 int main(int argc, char **argv){
   gft::SparseGraph::SparseGraph *sg;
   gft::Image32::Image32 *img, *pred, *label;
@@ -39,7 +39,7 @@ int main(int argc, char **argv){
   int S2[] = {7, 483+88*600, 466+160*600, 441+228*600, 427+291*600, 408+352*600, 390+403*600, 372+462*600};
   int S[2];
   int i;
-  
+
   if(argc < 2){
     fprintf(stdout,"usage:\n");
     fprintf(stdout,"proj1 <image1>\n");
@@ -55,8 +55,8 @@ int main(int argc, char **argv){
 
   /*Para cada ponto de origem:*/
   for(i = 1; i <= S1[0]; i++){
-    /*Armazena o ponto de origem atual no vetor S, onde 
-      a primeira posicao guarda o numero de elementos 
+    /*Armazena o ponto de origem atual no vetor S, onde
+      a primeira posicao guarda o numero de elementos
       armazenados no vetor (1 nesse caso).*/
     S[0] = 1;
     S[1] = S1[i];
@@ -67,10 +67,10 @@ int main(int argc, char **argv){
     label->data[S[1]] = 1;
 
     /*Executa a IFT com funcao aditiva de custo*/
-    pred = gft::ift::pred_IFTSUM(sg, S, label, power);
+    pred = gft::ift::pred_IFT_SLIC(sg, S, label, img, power);
 
-    /*Gera imagem colorida mostrando os caminhos calculados 
-      ate os pontos de destino, que estao armazenados no 
+    /*Gera imagem colorida mostrando os caminhos calculados
+      ate os pontos de destino, que estao armazenados no
       mapa de predecessores*/
     paths = ViewPaths(img, pred, S2);
 

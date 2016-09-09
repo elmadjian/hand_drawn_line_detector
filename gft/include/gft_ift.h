@@ -33,13 +33,18 @@ namespace gft{
 				  int *S,
 				  Image32::Image32 *label,
 				  float power);
-    
+
+    Image32::Image32 *pred_IFT_SLIC(SparseGraph::SparseGraph *sg,
+                  int *S,
+                  Image32::Image32 *label,
+                  Image32::Image32 *img,
+                  float power);
+
     //---------------------------------------
-    /*    
+    /*
     Image32::Image32 *EDT(Image32::Image32 *bin, float r);
     */
   } //end ift namespace
 } //end gft namespace
 
 #endif
-

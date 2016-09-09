@@ -1,5 +1,6 @@
 import sys, cv2, queue
 import numpy as np
+from datetime import datetime
 
 
 #===============================================================================
@@ -15,17 +16,17 @@ class Graph():
         self.img = img
 
     def set_seed(self, seed):
-        self.seed = seed
+        self.seed = Node(seed)
         self.__mark_node(seed)
+        self.V += 1
 
-    def set_arch(self, pixel_A, pixel_B):
-        node_A = Node(pixel_A)
-        node_B = Node(pixel_B)
+    def set_arch(self, node_A, node_B):
         node_A.set_arch(node_B)
-        node_B.set_arch(node_A)
-        self.node[pixel_A] = node_A
-        self.node[pixel_B] = node_B
-        self.__mark_node(pixel_B)
+        self.node[node_A.pixel] = node_A
+        self.node[node_B.pixel] = node_B
+        self.__mark_node(node_B.pixel)
+        self.V += 2
+        self.N += 1
 
     def has_arch(self, pixel_A, pixel_B):
         node_B = self.node[pixel_B]
@@ -33,8 +34,33 @@ class Graph():
             return True
         return False
 
+    def add_node(self, node):
+        self.node[node.pixel] = node
+        self.V += 1
+
     def get_node(self, pixel):
         return self.node[pixel]
+
+    def has_node(self, pixel):
+        if pixel in self.node:
+            return True
+        return False
+
+    def has_8_neighbor(self, pixel):
+        adj_list = [(-1,-1), (-1,0), (-1,1), (0,1), (1,1), (1,0), (1,-1), (0,-1)]
+        for i in adj_list:
+            p = (pixel[0] + i[0], pixel[1] + i[1])
+            if p in self.node:
+                return self.node[p]
+        return False
+
+    def has_4_neighbor(self, pixel):
+        adj_list = [(-1,0), (0,1), (1,0), (0,-1)]
+        for i in adj_list:
+            p = (pixel[0] + i[0], pixel[1] + i[1])
+            if p in self.node:
+                return self.node[p]
+        return False
 
     def __mark_node(self, pixel):
         self.img[pixel] = (0,255,0)
@@ -45,27 +71,34 @@ class Graph():
 class Node():
     def __init__(self, pixel):
         self.arch = set()
-        self.node = pixel
+        self.pixel = pixel
+        self.time = datetime.now()
 
-    def has_arch(self, node):
-        if node in self.arch:
+    def has_arch(self):
+        if len(self.arch) > 0:
             return True
         return False
+
+    def get_arch(self):
+        return self.arch.pop()
 
     def set_arch(self, node):
         self.arch.add(node)
 
     def y(self):
-        self.node[0]
+        return self.pixel[0]
 
     def x(self):
-        self.node[1]
+        return self.pixel[1]
+
+    def __lt__(self, other):
+        self.time < other.time
 
 #===============================================================================
 
 MAX_INT = sys.maxsize
-queue = queue.PriorityQueue()
 G = Graph()
+Q = queue.PriorityQueue()
 
 
 
@@ -82,33 +115,47 @@ def main():
     img   = cv2.GaussianBlur(img, (3,3), 5)
     gray  = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     label = np.ones(gray.shape)
-    cost  = np.full(gray.shape, sys.maxsize)
+    #cost  = np.full(gray.shape, sys.maxsize)
 
     for s in seeds:
         label[s] = 0
     for s in sinks:
         label[s] = 0
 
-    # for s in seeds:
-    #     img = cv2.circle(img, s, 10, (0, 0, 255))
-    #
-    # for s in sinks:
-    #     img = cv2.circle(img, s, 10, (0, 255, 0))
-
-    #print(get_minimum(gray, seeds[0], 3))
-
     pos = seeds[0]
     G.set_img(img)
     G.set_seed(pos)
-    for i in range(600):
-        next_pos = get_neighbor(label, gray, pos, 3)
-        pos = next_pos
+    Q.put((-1, G.seed))
+    sink_count = len(sinks)
+
+    #while sink_count != 0:
+    for i in range(10):
+        lowest = Q.get()[1]
+        print("lowest:", lowest.pixel)
+        neighbor = G.has_4_neighbor(lowest.pixel)
+        if neighbor:
+            G.set_arch(lowest, neighbor)
+
+        neighborhood_4_cost(gray, lowest)
+
+        #TODO
+        #Escrever um codigo para mostrar o grafo, com as setinhas e tudo o mais
+        print("arco:", G.get_node(lowest).get_arch())
+
+        if lowest.pixel in sinks:
+            sink_count -= 1
+
         cv2.imshow("teste", img)
         k = cv2.waitKey(0)
         if k & 0xFF == ord('q'):
             sys.exit()
 
-    cv2.destroyAllWindows()
+    view_paths(img, sinks)
+    # cv2.imshow("teste", img)
+    # k = cv2.waitKey(0)
+    # if k & 0xFF == ord('q'):
+    #     sys.exit()
+    # cv2.destroyAllWindows()
 
 # Get a window centered on pixel p of size (2*k + 1)^2
 #-----------------------------------------------------
@@ -120,24 +167,47 @@ def get_window(img, p, k):
 
 # Get local minimum of adjacency
 #--------------------------------
-def get_neighbors(label, img, p, k):
-    adj_list = [(-1,-1), (-1,0), (-1,1), (0,1), (1,1), (1,0), (1,-1), (0,-1)]
-    average_list = [0 for i in range(len(adj_list))]
-    for i in range(len(adj_list)):
-        pixel = (p[0] + adj_list[i][0], p[1] + adj_list[i][1])
-        if label[pixel]:
-            window = get_window(img, pixel, k)
-            gradient = np.gradient(window)
-            avg = np.mean(gradient)
-            cost = abs(avg)
-            average_list[i] = cost
-            label[pixel] = 0
+def neighborhood_4_cost(img, node):
+    adj_list = [(-1,0), (0,1), (1,0), (0,-1)]
+    for i in adj_list:
+        pixel = (node.y() + i[0], node.x() + i[1])
+        if not G.has_node(pixel):
+            n = Node(pixel)
+            G.add_node(n)
+            cost = abs(img[pixel] - img[node.pixel]) + img[pixel]
+            Q.put((cost, n))
 
-    for i in average_list:
-        print(i)
-    print("---------------------")
-    pos = adj_list[np.argmax(average_list)]
-    return p[0] + pos[0], p[1] + pos[1]
+#---------------------------------
+def neighborhood_8_cost(img, node):
+    adj_list = [(-1,-1), (-1,0), (-1,1), (0,1), (1,1), (1,0), (1,-1), (0,-1)]
+    for i in adj_list:
+        pixel = (node.y() + i[0], node.x() + i[1])
+        if not G.has_node(pixel):
+            n = Node(pixel)
+            G.add_node(n)
+            cost = abs(img[pixel] - img[node.pixel]) + img[pixel]
+            Q.put((cost, n))
+
+#-------------------------
+# def count():
+#     if not hasattr(count, "counter"):
+#         count.counter = 0
+#     count.counter += 1
+#     return count.counter
+
+#------------------------------
+def view_paths(img, sinks):
+    for s in sinks:
+        node = G.get_node(s)
+        while (node.has_arch()):
+            img[node.pixel] = (0,255,255)
+            #print(len(node.arch))
+            node = node.get_arch()
+
+    cv2.imshow("teste", img)
+    k = cv2.waitKey(0)
+    if k & 0xFF == ord('q'):
+        sys.exit()
 
 
 # Open an image

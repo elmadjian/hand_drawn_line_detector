@@ -15,9 +15,9 @@ class Graph():
 
     def set_img(self, img):
         self.img = img
-        for j in range(img.shape[0]):
-            for i in range(img.shape[1]):
-                self.add_node(Node((j,i)))
+        # for j in range(img.shape[0]):
+        #     for i in range(img.shape[1]):
+        #         self.add_node(Node((j,i)))
 
     # def set_seed(self, seed):
     #     self.seed = Node(seed)
@@ -172,14 +172,14 @@ def main():
 
     pos = seeds[0]
     G.set_img(img)
-    n = G.get_node(pos)
-    n.cost = 0
+    n = Node(pos, 0)
+    G.add_node(n)
     Q.put(n, 0)
-    neighborhood = get_neighborhood(8)
+    neighborhood = get_neighborhood(4)
     sink_count = len(sinks)
 
     #while sink_count != 0:
-    for i in range(60000):
+    for i in range(50000):
         lowest = Q.pop()
         G.add_visited(lowest.pixel)
         #print("visitei:", lowest.pixel)
@@ -193,9 +193,9 @@ def main():
         # if k & 0xFF == ord('q'):
         #     sys.exit()
 
-    for s in sinks:
-        view_path(img, s)
-    #view_path(img, sinks[6])
+    # for s in sinks:
+    #     view_path(img, s)
+    view_path(img, sinks[6])
 
     cv2.imshow("teste", img)
     k = cv2.waitKey(0)
@@ -228,7 +228,7 @@ def ift(img, node, neighborhood):
         if not is_valid_pixel(img, pixel):
             continue
         if not G.is_visited(pixel):
-            n = G.get_node(pixel)
+            n = Node(pixel) if not G.has_node(pixel) else G.get_node(pixel)
             cost = abs(img[pixel] - img[node.pixel]) + img[pixel]
             #print("node:", node.pixel, "V:", n.pixel, "custo:", cost, "custo_V:", n.cost)
             if cost < n.cost:

@@ -1,4 +1,4 @@
-import sys, cv2, heapq, itertools
+import sys, cv2, bisect
 import numpy as np
 from datetime import datetime
 
@@ -11,9 +11,13 @@ class Graph():
         self.seed = None
         self.node = {}
         self.img = img
+        self.visited = set()
 
     def set_img(self, img):
         self.img = img
+        for j in range(img.shape[0]):
+            for i in range(img.shape[1]):
+                self.add_node(Node((j,i)))
 
     # def set_seed(self, seed):
     #     self.seed = Node(seed)
@@ -22,7 +26,7 @@ class Graph():
 
     def set_arch(self, node_A, node_B):
         node_A.set_arch(node_B)
-        self.node[node_A.pixel] = node_A
+        self.node[node_A.pixel] = node_B
         self.node[node_B.pixel] = node_B
         self._mark_node(node_B.pixel)
         self.V += 2
@@ -43,6 +47,14 @@ class Graph():
 
     def has_node(self, pixel):
         if pixel in self.node:
+            return True
+        return False
+
+    def add_visited(self, pixel):
+        self.visited.add(pixel)
+
+    def is_visited(self, pixel):
+        if pixel in self.visited:
             return True
         return False
 
@@ -70,20 +82,25 @@ class Graph():
 #===============================================================================
 class Node():
     def __init__(self, pixel, cost=sys.maxsize):
-        self.arch = set()
+        self.arch = None
         self.pixel = pixel
         self.cost = cost
 
     def has_arch(self):
-        if len(self.arch) > 0:
+        if self.arch:
             return True
         return False
 
     def get_arch(self):
-        return self.arch.pop()
+        return self.arch
+
+    def pop_arch(self):
+        arch = self.arch
+        self.arch = None
+        return arch
 
     def set_arch(self, node):
-        self.arch.add(node)
+        self.arch = node
 
     def y(self):
         return self.pixel[0]
@@ -99,26 +116,23 @@ class Node():
 class PriorityQueue:
     def __init__(self):
         self.queue = []
-        self.entry_finder = {}
-        self.counter = itertools.count()
+        self.nodes = {}
 
     def put(self, item, priority):
-        if item in self.entry_finder:
-            self.remove(item)
-        entry = [priority, next(self.counter), item]
-        self.entry_finder[item] = entry
-        heapq.heappush(self.queue, entry)
-
-    def remove(self, item):
-        entry = self.entry_finder.pop(item)
-        entry[-1] = "removed"
+        if item in self.nodes:
+            pos = bisect.bisect_right(self.queue, [self.nodes[item], item])
+            del self.queue[pos-1]
+        bisect.insort_right(self.queue, [priority, item])
+        self.nodes[item] = priority
 
     def pop(self):
-        while self.queue:
-            priority, count, item = heapq.heappop(self.queue)
-            if item != "removed":
-                del self.entry_finder[item]
-                return item
+        if self.queue:
+            item = self.queue.pop(0)[1]
+            #print("queue:", len(self.queue))
+            #print("nodes:", len(self.nodes))
+            if item in self.nodes:
+                del self.nodes[item]
+            return item
         raise KeyError('pop from an empty priority queue')
 
 #===============================================================================
@@ -151,21 +165,23 @@ def main():
 
     pos = seeds[0]
     G.set_img(img)
-    Q.put(Node(pos, 0), 0)
-    neighborhood = get_neighborhood(4)
+    n = G.get_node(pos)
+    n.cost = 0
+    Q.put(n, 0)
+    neighborhood = get_neighborhood(8)
     sink_count = len(sinks)
 
-    while sink_count != 0:
-    #for i in range(30000):
+    #while sink_count != 0:
+    for i in range(60000):
         lowest = Q.pop()
-        G.add_node(lowest)
+        G.add_visited(lowest)
         ift(gray, lowest, neighborhood)
 
         if lowest.pixel in sinks:
             sink_count -= 1
 
         # cv2.imshow("teste", img)
-        # k = cv2.waitKey(0)
+        # k = cv2.waitKey(1)
         # if k & 0xFF == ord('q'):
         #     sys.exit()
 
@@ -187,8 +203,8 @@ def get_window(img, p, k):
     return img[lin-k:lin+k+1, col-k:col+k+1]
 
 
-# Get local minimum of adjacency
-#--------------------------------
+# Get local adjacency
+#---------------------
 def get_neighborhood(neighborhood):
     if neighborhood == 4:
         return [(-1,0), (0,1), (1,0), (0,-1)]
@@ -196,21 +212,22 @@ def get_neighborhood(neighborhood):
         return [(-1,-1), (-1,0), (-1,1), (0,1), (1,1), (1,0), (1,-1), (0,-1)]
 
 
+#Image Forest Transform
 #---------------------------------
 def ift(img, node, neighborhood):
     for i in neighborhood:
         pixel = (node.y() + i[0], node.x() + i[1])
         if not is_valid_pixel(img, pixel):
             continue
-        if not G.has_node(pixel):
-            n = Node(pixel)
+        if not G.is_visited(pixel):
+            n = G.get_node(pixel)
             cost = abs(img[pixel] - img[node.pixel]) + img[pixel]
+            #print(cost, n.cost)
             if cost < n.cost:
-                if n.cost != sys.maxsize:
-                    Q.remove(n)
                 n.cost = cost
                 G.set_arch(n, node)
                 Q.put(n, cost)
+    #print("=====================")
 
 #-------------------------
 def is_valid_pixel(img, pixel):
@@ -228,7 +245,7 @@ def view_path(img, sink):
     node = G.get_node(sink)
     while (node.has_arch()):
         img[node.pixel] = (0,255,255)
-        node = node.get_arch()
+        node = node.pop_arch()
 
 
 

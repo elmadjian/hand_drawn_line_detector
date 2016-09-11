@@ -26,7 +26,7 @@ class Graph():
 
     def set_arch(self, node_A, node_B):
         node_A.set_arch(node_B)
-        self.node[node_A.pixel] = node_B
+        self.node[node_A.pixel] = node_A
         self.node[node_B.pixel] = node_B
         self._mark_node(node_B.pixel)
         self.V += 2
@@ -43,6 +43,7 @@ class Graph():
         self.V += 1
 
     def get_node(self, pixel):
+        #print("pixel entrado:", pixel, "no:", self.node[pixel].pixel)
         return self.node[pixel]
 
     def has_node(self, pixel):
@@ -54,6 +55,7 @@ class Graph():
         self.visited.add(pixel)
 
     def is_visited(self, pixel):
+        #print("pixel:", pixel, "visited:", self.visited)
         if pixel in self.visited:
             return True
         return False
@@ -147,15 +149,20 @@ Q = PriorityQueue()
 #~~~~~~~~~~~~
 def main():
 
-    #seeds = [(148,99), (139,165), (129,205), (123,246), (111,315), (103,379), (90,450)]
-    #sinks = [(483,88), (466,160), (441,228), (427,291), (408,352), (390,403), (372,462)]
     seeds = [(99,148), (165,139), (205,129), (246,123), (315,111), (379,103), (450,90)]
     sinks = [(88,483), (160,466), (228,441), (291,427), (352,408), (403,390), (462,372)]
+    # seeds = [(47,16)] #teste.png
+    # sinks = [(10,24), (45,88), (62,91), (92,84), (94,49), (89,18)] #teste.png
+    # seeds = [(14,10)] #teste2.png
+    # sinks = [(68,65)] #teste2.png
+    #seeds = [(12,2)] #teste3.png
+    #sinks = [(12,22)] #teste3.png
 
     img   = open_img(sys.argv)
     img   = cv2.GaussianBlur(img, (3,3), 5)
     gray  = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     label = np.ones(gray.shape)
+
     #cost  = np.full(gray.shape, sys.maxsize)
 
     for s in seeds:
@@ -174,14 +181,15 @@ def main():
     #while sink_count != 0:
     for i in range(60000):
         lowest = Q.pop()
-        G.add_visited(lowest)
+        G.add_visited(lowest.pixel)
+        #print("visitei:", lowest.pixel)
         ift(gray, lowest, neighborhood)
 
         if lowest.pixel in sinks:
             sink_count -= 1
 
         # cv2.imshow("teste", img)
-        # k = cv2.waitKey(1)
+        # k = cv2.waitKey(0)
         # if k & 0xFF == ord('q'):
         #     sys.exit()
 
@@ -222,7 +230,7 @@ def ift(img, node, neighborhood):
         if not G.is_visited(pixel):
             n = G.get_node(pixel)
             cost = abs(img[pixel] - img[node.pixel]) + img[pixel]
-            #print(cost, n.cost)
+            #print("node:", node.pixel, "V:", n.pixel, "custo:", cost, "custo_V:", n.cost)
             if cost < n.cost:
                 n.cost = cost
                 G.set_arch(n, node)

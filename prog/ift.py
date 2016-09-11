@@ -1,6 +1,9 @@
 import sys, cv2, bisect
 import numpy as np
+import skimage
+from skimage import filters, morphology, util
 from datetime import datetime
+
 
 
 #===============================================================================
@@ -20,7 +23,7 @@ class Graph():
         node_A.set_arch(node_B)
         self.node[node_A.pixel] = node_A
         self.node[node_B.pixel] = node_B
-        self._mark_node(node_B.pixel)
+        #self._mark_node(node_B.pixel)
         self.V += 2
         self.N += 1
 
@@ -32,7 +35,6 @@ class Graph():
 
     def add_node(self, node):
         self.node[node.pixel] = node
-        self._mark_node(node.pixel)
         self.V += 1
 
     def get_node(self, pixel):
@@ -152,6 +154,24 @@ def main():
     img   = open_img(sys.argv)
     img   = cv2.GaussianBlur(img, (3,3), 5)
     gray  = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    sobel = filters.sobel(gray) * 5
+    norm  = skimage.img_as_ubyte(sobel)
+
+    # cv2.imshow("teste", norm)
+    # cv2.waitKey(0)
+
+    thresh = norm > 35
+    thresh = np.uint8(thresh)
+    # cv2.imshow("teste", thresh*255)
+    # cv2.waitKey(0)
+
+    paths = morphology.binary_closing(thresh, morphology.disk(5))
+    paths = skimage.img_as_ubyte(paths)
+    paths = 255-paths
+
+    # cv2.imshow("teste", paths)
+    # cv2.waitKey(0)
+
     label = np.ones(gray.shape)
 
     #cost  = np.full(gray.shape, sys.maxsize)
@@ -161,36 +181,38 @@ def main():
     for s in sinks:
         label[s] = 0
 
-    pos = seeds[0]
+    pos = seeds[6]
     G.set_img(img)
-    node = Node(pos, 0)
-    G.add_node(node)
-    #Q.put(n, 0)
-    neighborhood = get_neighborhood("asterisk")
+    n = Node(pos, 0)
+    G.add_node(n)
+    Q.put(n, 0)
+    neighborhood = get_neighborhood(4)
     sink_count = len(sinks)
 
     #while sink_count != 0:
-    for i in range(2000):
-        node = get_line(gray, node, neighborhood)
-    #     ift(gray, lowest, neighborhood)
-    #
-    #     if lowest.pixel in sinks:
-    #         sink_count -= 1
-    #
-        cv2.imshow("teste", img)
-        k = cv2.waitKey(0)
-        if k & 0xFF == ord('q'):
-            sys.exit()
-    #
-    # # for s in sinks:
-    # #     view_path(img, s)
-    # view_path(img, sinks[6])
-    #
-    # cv2.imshow("teste", img)
-    # k = cv2.waitKey(0)
-    # if k & 0xFF == ord('q'):
-    #     sys.exit()
-    # cv2.destroyAllWindows()
+    for i in range(60000):
+        lowest = Q.pop()
+        G.add_visited(lowest.pixel)
+        #print("visitei:", lowest.pixel)
+        ift(paths, lowest, neighborhood)
+
+        if lowest.pixel in sinks:
+            sink_count -= 1
+
+        # cv2.imshow("teste", img)
+        # k = cv2.waitKey(1)
+        # if k & 0xFF == ord('q'):
+        #     sys.exit()
+
+    for s in sinks:
+        view_path(img, s)
+    #view_path(img, sinks[6])
+
+    cv2.imshow("teste", img)
+    k = cv2.waitKey(0)
+    if k & 0xFF == ord('q'):
+        sys.exit()
+    cv2.destroyAllWindows()
 
 # Get a window centered on pixel p of size (2*k + 1)^2
 #-----------------------------------------------------
@@ -202,53 +224,29 @@ def get_window(img, p, k):
 
 # Get local adjacency
 #---------------------
-def get_neighborhood(neighborhood, length=5):
+def get_neighborhood(neighborhood):
     if neighborhood == 4:
         return [(-1,0), (0,1), (1,0), (0,-1)]
     if neighborhood == 8:
         return [(-1,-1), (-1,0), (-1,1), (0,1), (1,1), (1,0), (1,-1), (0,-1)]
-    if neighborhood == "asterisk":
-        lines = [[],[],[],[],[],[],[],[]]
-        for i in range(1, length):
-            lines[0].append((-i,-i))
-            lines[1].append((-i, 0))
-            lines[2].append((-i, i))
-            lines[3].append(( 0, i))
-            lines[4].append((i , i))
-            lines[5].append((i , 0))
-            lines[6].append((i, -i))
-            lines[7].append((0, -i))
-        return lines
-#minimum line cost
-#---------------------------------
-def get_line(img, node, neighborhood):
-    min_cost  = sys.maxsize
-    curr_line = 0
-    for l in range(len(neighborhood)):
-        line_cost = 0
-        for i in neighborhood[l]:
-            pixel = (node.y() + i[0], node.x() + i[1])
-            if not is_valid_pixel(img, pixel):
-                continue
-            line_cost += abs(img[pixel] - img[node.pixel]) + img[pixel]
-            if G.has_node(pixel):
-                line_cost += 255
-            if line_cost > min_cost:
-                break
-        if line_cost < min_cost:
-            min_cost = line_cost
-            curr_line = l
 
-    for i in neighborhood[curr_line]:
+
+#Image-Forest Transform
+#---------------------------------
+def ift(img, node, neighborhood):
+    for i in neighborhood:
         pixel = (node.y() + i[0], node.x() + i[1])
         if not is_valid_pixel(img, pixel):
             continue
-        G.add_node(Node(pixel))
-
-    y = neighborhood[curr_line][3][0]
-    x = neighborhood[curr_line][3][1]
-    # #print(x, y)
-    return Node((node.y() + y, node.x() + x))
+        if not G.is_visited(pixel):
+            n = Node(pixel) if not G.has_node(pixel) else G.get_node(pixel)
+            cost = abs(img[pixel] - img[node.pixel]) + img[pixel]
+            #print("node:", node.pixel, "V:", n.pixel, "custo:", cost, "custo_V:", n.cost)
+            if cost < n.cost:
+                n.cost = cost
+                G.set_arch(n, node)
+                Q.put(n, cost)
+    #print("=====================")
 
 #-------------------------
 def is_valid_pixel(img, pixel):

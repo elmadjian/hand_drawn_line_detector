@@ -10,8 +10,6 @@ from datetime import datetime
 #===============================================================================
 class Graph():
     def __init__(self, img=None):
-        self.V = 0
-        self.N = 0
         self.seed = None
         self.node = {}
         self.img = img
@@ -21,22 +19,20 @@ class Graph():
         self.img = img
 
     def set_arch(self, node_A, node_B):
-        node_A.set_arch(node_B)
+        node_A.set_out_arch(node_B)
+        node_B.set_in_arch(node_A)
         self.node[node_A.pixel] = node_A
         self.node[node_B.pixel] = node_B
         #self._mark_node(node_B.pixel)
-        self.V += 2
-        self.N += 1
 
     def has_arch(self, pixel_A, pixel_B):
         node_B = self.node[pixel_B]
-        if self.node[pixel_A].has_arch(node_B):
+        if self.node[pixel_A].has_out_arch(node_B):
             return True
         return False
 
     def add_node(self, node):
         self.node[node.pixel] = node
-        self.V += 1
 
     def get_node(self, pixel):
         return self.node[pixel]
@@ -78,25 +74,38 @@ class Graph():
 #===============================================================================
 class Node():
     def __init__(self, pixel, cost=sys.maxsize):
-        self.arch = None
+        self.in_arch = set()
+        self.out_arch = set()
         self.pixel = pixel
         self.cost = cost
 
-    def has_arch(self):
-        if self.arch:
+    def has_in_arch(self):
+        if self.in_arch:
             return True
         return False
 
-    def get_arch(self):
-        return self.arch
+    def has_out_arch(self):
+        if self.out_arch:
+            return True
+        return False
 
-    def pop_arch(self):
-        arch = self.arch
-        self.arch = None
-        return arch
+    def get_in_arch(self):
+        return list(self.in_arch)[0]
 
-    def set_arch(self, node):
-        self.arch = node
+    def get_out_arch(self):
+        return list(self.out_arch)[0]
+
+    def get_in_degree(self):
+        return len(self.in_arch)
+
+    def get_out_degree(self):
+        return len(self.out_arch)
+
+    def set_in_arch(self, node):
+        self.in_arch.add(node)
+
+    def set_out_arch(self, node):
+        self.out_arch.add(node)
 
     def y(self):
         return self.pixel[0]
@@ -135,6 +144,7 @@ class PriorityQueue:
 
 MAX_INT = sys.maxsize
 G = Graph()
+H = Graph()
 Q = PriorityQueue()
 
 
@@ -145,6 +155,7 @@ def main():
 
     seeds = [(99,148), (165,139), (205,129), (246,123), (315,111), (379,103), (450,90)]
     sinks = [(88,483), (160,466), (228,441), (291,427), (352,408), (403,390), (462,372)]
+    color = [(0,128,255),(0,255,128),(0,255,255),(0,0,255),(128,0,255),(255,255,0),(255,51,153)]
     # seeds = [(47,16)] #teste.png
     # sinks = [(10,24), (45,88), (62,91), (92,84), (94,49), (89,18)] #teste.png
     # seeds = [(14,10)] #teste2.png
@@ -174,16 +185,12 @@ def main():
     # cv2.imshow("teste", paths)
     # cv2.waitKey(0)
 
-    label = np.ones(gray.shape)
 
     #cost  = np.full(gray.shape, sys.maxsize)
 
-    for s in seeds:
-        label[s] = 0
-    for s in sinks:
-        label[s] = 0
 
-    pos = seeds[0]
+    #for i in range(len(seeds)):
+    pos = seeds[6]
     G.set_img(img)
     n = Node(pos, 0)
     G.add_node(n)
@@ -201,26 +208,8 @@ def main():
         if lowest.pixel in sinks:
             sink_count -= 1
 
-        # cv2.imshow("teste", img)
-        # k = cv2.waitKey(1)
-        # if k & 0xFF == ord('q'):
-        #     sys.exit()
-
-    # for s in sinks:
-    #     x_list, y_list = view_path(img, s)
-    x_list, y_list = view_path(img, sinks[3])
-    a, b, r, p, stderr = stats.linregress(x_list, y_list)
-    x_curve = np.linspace(x_list[0], x_list[-1], num=len(x_list))
-    for x in x_curve:
-        y_pixel = int(line(x, a, b))
-        x_pixel = int(x)
-        img[y_pixel, x_pixel] = (0,0,255)
-
-    x_correct = np.linspace(seeds[0][1], sinks[3][1], num=len(x_list))
-    y_correct = np.linspace(seeds[0][0], sinks[3][0], num=len(x_list))
-    for i in range(len(x_correct)):
-        img[int(y_correct[i]), int(x_correct[i])] = (0,255,0)
-    #print("r:", r, "p:", p, "stderr:", stderr)
+    build_path_graph(img, sinks)
+    find_correct_path(img, seeds[6], sinks, color[1])
 
 
     cv2.imshow("teste", img)
@@ -279,12 +268,78 @@ def view_path(img, sink):
     x_points = []
     y_points = []
     node = G.get_node(sink)
-    while (node.has_arch()):
+    while (node.has_out_arch()):
         x_points.append(node.x())
         y_points.append(node.y())
         img[node.pixel] = (0,255,255)
-        node = node.get_arch()
+        node = node.get_out_arch()
     return x_points, y_points
+
+#---------------------------------------
+def build_path_graph(img, sinks):
+    for s in sinks:
+        node = G.get_node(s)
+        while (node.has_out_arch()):
+            p1 = node.pixel
+            p2 = node.get_out_arch().pixel
+            #img[p1] = (0,255,255)
+            n1 = Node(p1) if not H.has_node(p1) else H.get_node(p1)
+            n2 = Node(p2) if not H.has_node(p2) else H.get_node(p2)
+            H.set_arch(n1, n2)
+            node = node.get_out_arch()
+
+#--------------------------------------
+def find_correct_path(img, seed, sinks, color):
+    node = H.get_node(seed)
+    crossing = 1
+    while (node.pixel not in sinks):
+        best_node = node.get_in_arch()
+        if node.get_in_degree() > 1:
+            best_cost = 0
+            crossing += 1
+            for n in node.in_arch:
+                vec1 = get_vector(node, 15, "out")
+                vec2 = get_vector(n, 15, "in")
+                cost = np.dot(vec1, vec2)
+                if abs(cost) > best_cost:
+                    best_cost  = abs(cost)
+                    best_node = n
+
+        img[node.pixel] = color
+        node = best_node
+
+
+#-------------------
+def get_pixel_list(node, length, direction):
+    l = 0
+    x_list = []
+    y_list = []
+    while l < length:
+        x_list.append(node.x())
+        y_list.append(node.y())
+        node = node.get_in_arch() if direction == "in" else node.get_out_arch()
+        l += 1
+    return x_list, y_list
+
+#----------------
+def get_vector(node, length, direction):
+    l = 0
+    first_pixel = node.pixel
+    last_pixel = None
+    while l < length:
+        last_pixel = node.pixel
+        node = node.get_in_arch() if direction == "in" else node.get_out_arch()
+        l += 1
+    vector = [last_pixel[1]-first_pixel[1], last_pixel[0]-first_pixel[0]]
+    norm   = np.sqrt(vector[0]**2 + vector[1]**2)
+    return [vector[0]/norm, vector[1]/norm]
+
+
+                    # n = H.get_node(node.pixel)
+                    # print(n.get_degree())
+                    # if n.get_degree() > 1:
+                    #     cv2.circle(img, (n.pixel[1], n.pixel[0]), 5, (0,255,0))
+
 
 #--------------------------
 def line(x, a, b):

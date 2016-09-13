@@ -19,6 +19,9 @@ class Graph():
         self.img = img
 
     def set_arch(self, node_A, node_B):
+        if node_A.has_out_arch():
+            node = node_A.get_out_arch()
+            node.remove_in_arch(node_A)
         node_A.set_out_arch(node_B)
         node_B.set_in_arch(node_A)
         self.node[node_A.pixel] = node_A
@@ -75,7 +78,7 @@ class Graph():
 class Node():
     def __init__(self, pixel, cost=sys.maxsize):
         self.in_arch = set()
-        self.out_arch = set()
+        self.out_arch = None
         self.pixel = pixel
         self.cost = cost
 
@@ -90,22 +93,23 @@ class Node():
         return False
 
     def get_in_arch(self):
-        return list(self.in_arch)[0]
+        if len(self.in_arch) > 0:
+            return list(self.in_arch)[0]
 
     def get_out_arch(self):
-        return list(self.out_arch)[0]
+        return self.out_arch
 
     def get_in_degree(self):
         return len(self.in_arch)
-
-    def get_out_degree(self):
-        return len(self.out_arch)
 
     def set_in_arch(self, node):
         self.in_arch.add(node)
 
     def set_out_arch(self, node):
-        self.out_arch.add(node)
+        self.out_arch = node
+
+    def remove_in_arch(self, node):
+        self.in_arch.discard(node)
 
     def y(self):
         return self.pixel[0]
@@ -143,9 +147,9 @@ class PriorityQueue:
 #===============================================================================
 
 MAX_INT = sys.maxsize
-G = Graph()
-H = Graph()
-Q = PriorityQueue()
+# G = Graph()
+# H = Graph()
+# Q = PriorityQueue()
 
 
 
@@ -169,47 +173,61 @@ def main():
     sobel = filters.sobel(gray)
     norm  = skimage.img_as_ubyte(sobel)
     norm *= 5
-
+    #
     # cv2.imshow("teste", norm)
     # cv2.waitKey(0)
-
+    #
     thresh = norm > 35
     thresh = np.uint8(thresh)
     # cv2.imshow("teste", thresh*255)
     # cv2.waitKey(0)
-
+    #
     paths = morphology.binary_closing(thresh)
+    paths = morphology.binary_erosion(paths, morphology.disk(1))
     paths = skimage.img_as_ubyte(paths)
     paths = 255-paths
+
+    #paths += gray
     #
     # cv2.imshow("teste", paths)
     # cv2.waitKey(0)
+    # paths = gray & paths
+    # cv2.imshow("teste", paths)
+    # cv2.waitKey(0)
+    #sys.exit()
 
 
-    #cost  = np.full(gray.shape, sys.maxsize)
-
-
-    #for i in range(len(seeds)):
-    pos = seeds[6]
-    G.set_img(img)
-    n = Node(pos, 0)
-    G.add_node(n)
-    Q.put(n, 0)
     neighborhood = get_neighborhood(4)
-    sink_count = len(sinks)
 
-    while sink_count != 0:
-    #for i in range(60000):
-        lowest = Q.pop()
-        G.add_visited(lowest.pixel)
-        #print("visitei:", lowest.pixel)
-        ift(paths, lowest, neighborhood)
+    for i in range(len(seeds)):
+        G = Graph()
+        H = Graph()
+        Q = PriorityQueue()
 
-        if lowest.pixel in sinks:
-            sink_count -= 1
+        pos = seeds[i]
+        G.set_img(img)
+        n = Node(pos, 0)
+        G.add_node(n)
+        Q.put(n, 0)
+        sink_count = len(sinks)
 
-    build_path_graph(img, sinks)
-    find_correct_path(img, seeds[6], sinks, color[1])
+        while sink_count != 0:
+            lowest = Q.pop()
+            G.add_visited(lowest.pixel)
+            ift(paths, lowest, neighborhood, G, Q)
+            #ift(paths, lowest, neighborhood)
+
+            if lowest.pixel in sinks:
+                sink_count -= 1
+
+            # cv2.imshow("teste", img)
+            # k = cv2.waitKey(1)
+            # if k & 0xFF == ord('q'):
+            #     sys.exit()
+
+        build_path_graph(img, sinks, G, H)
+        find_correct_path(img, seeds[i], sinks, color[i], H)
+        print("round!")
 
 
     cv2.imshow("teste", img)
@@ -237,14 +255,15 @@ def get_neighborhood(neighborhood):
 
 #Image-Forest Transform
 #---------------------------------
-def ift(img, node, neighborhood):
+def ift(img, node, neighborhood, G, Q):
     for i in neighborhood:
         pixel = (node.y() + i[0], node.x() + i[1])
         if not is_valid_pixel(img, pixel):
             continue
         if not G.is_visited(pixel):
             n = Node(pixel) if not G.has_node(pixel) else G.get_node(pixel)
-            cost = abs(img[pixel] - img[node.pixel]) + img[pixel]
+            cost = node.cost + img[pixel]
+            #cost = abs(img[pixel] - img[node.pixel]) + img[pixel]
             #print("node:", node.pixel, "V:", n.pixel, "custo:", cost, "custo_V:", n.cost)
             if cost < n.cost:
                 n.cost = cost
@@ -276,7 +295,7 @@ def view_path(img, sink):
     return x_points, y_points
 
 #---------------------------------------
-def build_path_graph(img, sinks):
+def build_path_graph(img, sinks, G, H):
     for s in sinks:
         node = G.get_node(s)
         while (node.has_out_arch()):
@@ -289,18 +308,17 @@ def build_path_graph(img, sinks):
             node = node.get_out_arch()
 
 #--------------------------------------
-def find_correct_path(img, seed, sinks, color):
+def find_correct_path(img, seed, sinks, color, H):
     node = H.get_node(seed)
-    crossing = 1
     while (node.pixel not in sinks):
         best_node = node.get_in_arch()
         if node.get_in_degree() > 1:
+            cv2.circle(img, (node.x(), node.y()), 5, (0,255,0))
             best_cost = 0
-            crossing += 1
             for n in node.in_arch:
-                vec1 = get_vector(node, 15, "out")
-                vec2 = get_vector(n, 15, "in")
+                vec1, vec2 = get_vectors(node, n, 80)
                 cost = np.dot(vec1, vec2)
+                #print("cost_found:", cost)
                 if abs(cost) > best_cost:
                     best_cost  = abs(cost)
                     best_node = n
@@ -320,6 +338,41 @@ def get_pixel_list(node, length, direction):
         node = node.get_in_arch() if direction == "in" else node.get_out_arch()
         l += 1
     return x_list, y_list
+
+#-----------------
+def get_vectors(node, pathway, length):
+    #gambiarra
+    for i in range(5):
+        node = node.get_out_arch()
+        if not node:
+            break
+    l = 0
+    last_pixel = node.pixel
+
+    while l < length/2:
+        first_pixel = node.pixel
+        node = node.get_out_arch()
+        if not node:
+            break
+        l += 1
+    vec1 = get_unit_vector(last_pixel, first_pixel)
+
+    l = 0
+    while l < length/2:
+        last_pixel = pathway.pixel
+        pathway = pathway.get_in_arch()
+        if not pathway:
+            break
+        l += 1
+    vec2 = get_unit_vector(last_pixel, first_pixel)
+    return vec1, vec2
+
+#--------------------
+def get_unit_vector(last_pixel, first_pixel):
+    vec = [last_pixel[1] - first_pixel[1], last_pixel[0] - first_pixel[0]]
+    norm = np.sqrt(vec[0]**2 + vec[1]**2)
+    return [vec[0]/norm, vec[1]/norm]
+
 
 #----------------
 def get_vector(node, length, direction):

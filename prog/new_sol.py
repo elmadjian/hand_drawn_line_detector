@@ -130,6 +130,13 @@ class PriorityQueue:
 
 #===============================================================================
 
+class Line:
+    def __init__(self, theta, points):
+        self.theta = theta
+        self.list = points
+
+#===============================================================================
+
 MAX_INT = sys.maxsize
 G = Graph()
 Q = PriorityQueue()
@@ -169,18 +176,20 @@ def main():
     neighborhood = get_neighborhood("asterisk")
     sink_count = len(sinks)
 
+    star_burst(gray, node, 20, 60)
+
     #while sink_count != 0:
-    for i in range(2000):
-        node = get_line(gray, node, neighborhood)
-    #     ift(gray, lowest, neighborhood)
-    #
-    #     if lowest.pixel in sinks:
-    #         sink_count -= 1
-    #
-        cv2.imshow("teste", img)
-        k = cv2.waitKey(0)
-        if k & 0xFF == ord('q'):
-            sys.exit()
+    # for i in range(2000):
+    #     node = get_line(gray, node, neighborhood)
+    # #     ift(gray, lowest, neighborhood)
+    # #
+    # #     if lowest.pixel in sinks:
+    # #         sink_count -= 1
+    # #
+    cv2.imshow("teste", img)
+    k = cv2.waitKey(0)
+    if k & 0xFF == ord('q'):
+        sys.exit()
     #
     # # for s in sinks:
     # #     view_path(img, s)
@@ -267,6 +276,37 @@ def view_path(img, sink):
     while (node.has_arch()):
         img[node.pixel] = (0,255,255)
         node = node.pop_arch()
+
+#---------------------------------------
+def star_burst(img, root, n, r):
+    '''
+    root -> point of origin
+    n -> number of lines to draw (must be even)
+    r -> line length (in pixels)
+    '''
+    theta = (2 * np.pi) / n
+    for i in range(n):
+        t = theta*i
+        pixels = draw_line(root, t, r)
+        print("theta:", np.degrees(t), "custo:", get_cost(img, pixels))
+
+
+def draw_line(root, theta, length):
+    x = root.x()
+    y = root.y()
+    dx = length * np.cos(theta)
+    dy = length * np.sin(theta)
+    list_x = np.linspace(x, x + dx, length)
+    list_y = np.linspace(y, y + dy, length)
+    return list(zip(list_y, list_x))
+
+def get_cost(img, pixels):
+    cost = 0
+    for i in range(len(pixels)-1):
+        cost += abs(img[pixels[i]] - img[pixels[i+1]]) + img[pixels[i+1]]
+        #cost += img[pixels[i]]**2
+    return cost
+
 
 
 

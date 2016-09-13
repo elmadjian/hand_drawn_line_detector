@@ -1,6 +1,7 @@
 import sys, cv2, bisect
 import numpy as np
 import skimage
+from scipy import stats
 from skimage import filters, morphology, util
 from datetime import datetime
 
@@ -154,8 +155,9 @@ def main():
     img   = open_img(sys.argv)
     img   = cv2.GaussianBlur(img, (3,3), 5)
     gray  = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    sobel = filters.sobel(gray) * 5
+    sobel = filters.sobel(gray)
     norm  = skimage.img_as_ubyte(sobel)
+    norm *= 5
 
     # cv2.imshow("teste", norm)
     # cv2.waitKey(0)
@@ -165,10 +167,10 @@ def main():
     # cv2.imshow("teste", thresh*255)
     # cv2.waitKey(0)
 
-    paths = morphology.binary_closing(thresh, morphology.disk(5))
+    paths = morphology.binary_closing(thresh)
     paths = skimage.img_as_ubyte(paths)
     paths = 255-paths
-
+    #
     # cv2.imshow("teste", paths)
     # cv2.waitKey(0)
 
@@ -181,7 +183,7 @@ def main():
     for s in sinks:
         label[s] = 0
 
-    pos = seeds[6]
+    pos = seeds[0]
     G.set_img(img)
     n = Node(pos, 0)
     G.add_node(n)
@@ -189,8 +191,8 @@ def main():
     neighborhood = get_neighborhood(4)
     sink_count = len(sinks)
 
-    #while sink_count != 0:
-    for i in range(60000):
+    while sink_count != 0:
+    #for i in range(60000):
         lowest = Q.pop()
         G.add_visited(lowest.pixel)
         #print("visitei:", lowest.pixel)
@@ -204,9 +206,22 @@ def main():
         # if k & 0xFF == ord('q'):
         #     sys.exit()
 
-    for s in sinks:
-        view_path(img, s)
-    #view_path(img, sinks[6])
+    # for s in sinks:
+    #     x_list, y_list = view_path(img, s)
+    x_list, y_list = view_path(img, sinks[3])
+    a, b, r, p, stderr = stats.linregress(x_list, y_list)
+    x_curve = np.linspace(x_list[0], x_list[-1], num=len(x_list))
+    for x in x_curve:
+        y_pixel = int(line(x, a, b))
+        x_pixel = int(x)
+        img[y_pixel, x_pixel] = (0,0,255)
+
+    x_correct = np.linspace(seeds[0][1], sinks[3][1], num=len(x_list))
+    y_correct = np.linspace(seeds[0][0], sinks[3][0], num=len(x_list))
+    for i in range(len(x_correct)):
+        img[int(y_correct[i]), int(x_correct[i])] = (0,255,0)
+    #print("r:", r, "p:", p, "stderr:", stderr)
+
 
     cv2.imshow("teste", img)
     k = cv2.waitKey(0)
@@ -261,12 +276,19 @@ def is_valid_pixel(img, pixel):
 #Shows a path backwards, stating from sink
 #-----------------------------------------
 def view_path(img, sink):
+    x_points = []
+    y_points = []
     node = G.get_node(sink)
     while (node.has_arch()):
+        x_points.append(node.x())
+        y_points.append(node.y())
         img[node.pixel] = (0,255,255)
-        node = node.pop_arch()
+        node = node.get_arch()
+    return x_points, y_points
 
-
+#--------------------------
+def line(x, a, b):
+    return a * x + b
 
 # Open an image
 #--------------

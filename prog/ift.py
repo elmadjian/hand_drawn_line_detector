@@ -147,10 +147,6 @@ class PriorityQueue:
 #===============================================================================
 
 MAX_INT = sys.maxsize
-# G = Graph()
-# H = Graph()
-# Q = PriorityQueue()
-
 
 
 #Main program
@@ -160,32 +156,28 @@ def main():
     seeds = [(99,148), (165,139), (205,129), (246,123), (315,111), (379,103), (450,90)]
     sinks = [(88,483), (160,466), (228,441), (291,427), (352,408), (403,390), (462,372)]
     color = [(0,128,255),(0,255,128),(0,255,255),(0,0,255),(128,0,255),(255,255,0),(255,51,153)]
-    # seeds = [(47,16)] #teste.png
-    # sinks = [(10,24), (45,88), (62,91), (92,84), (94,49), (89,18)] #teste.png
-    # seeds = [(14,10)] #teste2.png
-    # sinks = [(68,65)] #teste2.png
-    #seeds = [(12,2)] #teste3.png
-    #sinks = [(12,22)] #teste3.png
 
     img   = open_img(sys.argv)
-    img   = cv2.GaussianBlur(img, (3,3), 5)
+    cv2.imshow("teste", img)
+    cv2.waitKey(0)
     gray  = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    sobel = filters.sobel(gray)
-    norm  = skimage.img_as_ubyte(sobel)
-    norm *= 5
-    #
-    # cv2.imshow("teste", norm)
-    # cv2.waitKey(0)
-    #
-    thresh = norm > 35
-    thresh = np.uint8(thresh)
-    # cv2.imshow("teste", thresh*255)
-    # cv2.waitKey(0)
-    #
-    paths = morphology.binary_closing(thresh)
-    paths = morphology.binary_erosion(paths, morphology.disk(1))
+    p2, p98 = np.percentile(img, (2, 98))
+    norm = skimage.exposure.rescale_intensity(gray, in_range=(p2, p98))
+    sobel = filters.sobel(norm)
+    sobel = skimage.img_as_ubyte(sobel)
+
+    cv2.imshow("teste", sobel)
+    cv2.waitKey(0)
+
+    ret, thresh = cv2.threshold(sobel, 0, 255, cv2.THRESH_OTSU)
+    cv2.imshow("teste", thresh)
+    cv2.waitKey(0)
+    
+    paths = morphology.binary_closing(thresh, morphology.disk(3))
     paths = skimage.img_as_ubyte(paths)
     paths = 255-paths
+    cv2.imshow("teste", paths)
+    cv2.waitKey(0)
 
     #paths += gray
     #

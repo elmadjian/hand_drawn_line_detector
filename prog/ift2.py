@@ -142,6 +142,11 @@ class PriorityQueue():
             return item
         raise KeyError('pop from an empty priority queue')
 
+    def empty(self):
+        if self.queue:
+            return False
+        return True
+
 #===============================================================================
 class Setup():
     def __init__(self, filename):

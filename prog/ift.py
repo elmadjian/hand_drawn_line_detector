@@ -70,7 +70,7 @@ class Graph():
         return False
 
     def _mark_node(self, pixel):
-        self.img[pixel] = (0,100,0)
+        self.img[pixel] = (0,210,0)
 
 
 
@@ -161,21 +161,22 @@ def main():
     cv2.imshow("teste", img)
     cv2.waitKey(0)
     gray  = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    p2, p98 = np.percentile(img, (2, 98))
+    p2, p98 = np.percentile(img, (4, 98))
     norm = skimage.exposure.rescale_intensity(gray, in_range=(p2, p98))
-    sobel = filters.sobel(norm)
-    sobel = skimage.img_as_ubyte(sobel)
+    # sobel = filters.sobel(norm)
+    # sobel = skimage.img_as_ubyte(sobel)
 
-    cv2.imshow("teste", sobel)
-    cv2.waitKey(0)
+    # cv2.imshow("teste", sobel)
+    # cv2.waitKey(0)
+    #
+    # ret, thresh = cv2.threshold(sobel, 0, 255, cv2.THRESH_OTSU)
+    # cv2.imshow("teste", thresh)
+    # cv2.waitKey(0)
 
-    ret, thresh = cv2.threshold(sobel, 0, 255, cv2.THRESH_OTSU)
-    cv2.imshow("teste", thresh)
-    cv2.waitKey(0)
-    
-    paths = morphology.binary_closing(thresh, morphology.disk(3))
-    paths = skimage.img_as_ubyte(paths)
-    paths = 255-paths
+    # paths = morphology.binary_closing(thresh, morphology.disk(3))
+    # paths = skimage.img_as_ubyte(paths)
+    # paths = 255-paths
+    paths = norm
     cv2.imshow("teste", paths)
     cv2.waitKey(0)
 
@@ -191,35 +192,37 @@ def main():
 
     neighborhood = get_neighborhood(4)
 
-    for i in range(len(seeds)):
-        G = Graph()
-        H = Graph()
-        Q = PriorityQueue()
+    #for i in range(len(seeds)):
+    i = 6
+    G = Graph()
+    H = Graph()
+    Q = PriorityQueue()
 
-        pos = seeds[i]
-        G.set_img(img)
-        n = Node(pos, 0)
-        G.add_node(n)
-        Q.put(n, 0)
-        sink_count = len(sinks)
+    pos = seeds[i]
+    G.set_img(img)
+    n = Node(pos, 0)
+    G.add_node(n)
+    Q.put(n, 0)
+    sink_count = len(sinks)
+    counter = 0
 
-        while sink_count != 0:
-            lowest = Q.pop()
-            G.add_visited(lowest.pixel)
-            ift(paths, lowest, neighborhood, G, Q)
-            #ift(paths, lowest, neighborhood)
+    while sink_count != 0:
+        counter += 1
+        lowest = Q.pop()
+        G.add_visited(lowest.pixel)
+        ift(paths, lowest, neighborhood, G, Q)
+        #ift(paths, lowest, neighborhood)
 
-            if lowest.pixel in sinks:
-                sink_count -= 1
+        if lowest.pixel in sinks:
+            sink_count -= 1
 
-            # cv2.imshow("teste", img)
-            # k = cv2.waitKey(1)
-            # if k & 0xFF == ord('q'):
-            #     sys.exit()
+        #if counter % 200 == 0:
+            #cv2.imwrite("img_anim_" + str(counter) + ".jpg", img)
 
-        build_path_graph(img, sinks, G, H)
-        find_correct_path(img, seeds[i], sinks, color[i], H)
-        print("round!")
+
+    build_path_graph(img, sinks, G, H)
+    find_correct_path(img, seeds[i], sinks, color[i], H)
+    print("round!")
 
 
     cv2.imshow("teste", img)
@@ -254,7 +257,7 @@ def ift(img, node, neighborhood, G, Q):
             continue
         if not G.is_visited(pixel):
             n = Node(pixel) if not G.has_node(pixel) else G.get_node(pixel)
-            cost = node.cost + img[pixel]
+            cost = node.cost + ((int(img[node.pixel]) + int(img[pixel]))/2)**5
             #cost = abs(img[pixel] - img[node.pixel]) + img[pixel]
             #print("node:", node.pixel, "V:", n.pixel, "custo:", cost, "custo_V:", n.cost)
             if cost < n.cost:
@@ -288,20 +291,28 @@ def view_path(img, sink):
 
 #---------------------------------------
 def build_path_graph(img, sinks, G, H):
+    #counter = 0
     for s in sinks:
         node = G.get_node(s)
         while (node.has_out_arch()):
             p1 = node.pixel
             p2 = node.get_out_arch().pixel
-            #img[p1] = (0,255,255)
+            img[p1] = (0,255,215)
             n1 = Node(p1) if not H.has_node(p1) else H.get_node(p1)
             n2 = Node(p2) if not H.has_node(p2) else H.get_node(p2)
             H.set_arch(n1, n2)
             node = node.get_out_arch()
+            #counter += 1
+            #if counter % 25 == 0:
+                # cv2.imshow("teste", img)
+                # cv2.waitKey(0)
+                #cv2.imwrite("img_anim_" + str(counter) + ".jpg", img)
+
 
 #--------------------------------------
 def find_correct_path(img, seed, sinks, color, H):
     node = H.get_node(seed)
+    counter = 0
     while (node.pixel not in sinks):
         best_node = node.get_in_arch()
         if node.get_in_degree() > 1:
@@ -316,6 +327,11 @@ def find_correct_path(img, seed, sinks, color, H):
                     best_node = n
 
         img[node.pixel] = color
+        counter += 1
+        if counter % 10 == 0:
+            # cv2.imshow("teste", img)
+            # cv2.waitKey(0)
+            cv2.imwrite("img_anim_" + str(counter) + ".jpg", img)
         node = best_node
 
 

@@ -1,15 +1,12 @@
-import sys, cv2, bisect
+import sys, cv2, bisect, skimage, graph, seed_reader
 import numpy as np
-import skimage
-from scipy import stats
-from skimage import filters, morphology, util
-from datetime import datetime
-import graph, seed_reader
 
-
-
-MAX_INT = sys.maxsize
-
+#global parameters
+#~~~~~~~~~~~~~~~~~
+alpha   = 2       #power associated with intensity cost
+beta    = 300000  #factor associated with curvature cost
+radius  = 36      #radius of the circle
+bfactor = 25      #how much predecessors are necessary to build a vector
 
 #Main program
 #~~~~~~~~~~~~
@@ -28,12 +25,13 @@ def main():
     cv2.waitKey(0)
 
     neighborhood = get_neighborhood(8)
+    counting = 0
 
 
     for i in range(len(seeds)):
         infogrid = np.zeros(paths.shape, dtype="uint8")
         pos = seeds[i]
-        cv2.circle(infogrid, (pos[1],pos[0]), 36, 100)
+        cv2.circle(infogrid, (pos[1],pos[0]), radius, 100)
         predecessor = {}
         cost = initialize_costs(paths)
         cost[pos] = 0
@@ -56,20 +54,15 @@ def main():
                 Q.put(border_pixel, 0)
                 x,y = border_pixel[1], border_pixel[0]
                 infogrid[infogrid==100] = 0
-                cv2.circle(infogrid, (x,y), 36, 100)
-                if sink_in_circle(sinks, border_pixel, 36):
+                cv2.circle(infogrid, (x,y), radius, 100)
+                if sink_in_circle(sinks, border_pixel, radius):
                     radial = False
-            cv2.imshow("teste2", infogrid)
-            cv2.waitKey(1)
 
         view_path(img, lowest, predecessor, color[i])
 
-    cv2.imshow("teste", img)
-    cv2.waitKey(0)
 
-
-#Initialize all pixels with cost infinity
-#----------------------------------------
+# Initialize all pixels with cost infinity
+#------------------------------------------
 def initialize_costs(img):
     cost = {}
     for y in range(img.shape[0]):
@@ -87,9 +80,10 @@ def get_neighborhood(neighborhood):
         return [(-1,-1), (-1,0), (-1,1), (0,1), (1,1), (1,0), (1,-1), (0,-1)]
 
 
-#Image-Forest Transform
-#---------------------------------
-def ift(img, current, neighborhood, infogrid, Q, cost_dic, predecessor, direction, radial):
+# Image-Foresting Transform
+#------------------------------
+def ift(img, current, neighborhood, infogrid, Q, cost_dic,
+        predecessor, direction, radial):
     for i in neighborhood:
         pixel = (current[0] + i[0], current[1] + i[1])
         if not is_valid_pixel(img, pixel):
@@ -100,23 +94,23 @@ def ift(img, current, neighborhood, infogrid, Q, cost_dic, predecessor, directio
                 cost_dic[pixel] = cost_dic[current]
                 return pixel
         if infogrid[pixel] != 255:
-            cost = cost_dic[current] + ((int(img[current]) + int(img[pixel]))/2)**2
-            #print("before:", cost)
+            cost = cost_dic[current] + ((int(img[current]) + int(img[pixel]))/2)**alpha
             if direction is not None:
                 vec = get_vector(current, predecessor)
                 curvature = np.dot(vec, direction)
-                cost += (1-curvature)*300000
-                #print("after:", cost)
+                cost += (1-curvature)*beta
             if cost < cost_dic[pixel]:
                 cost_dic[pixel] = cost
                 predecessor[pixel] = current
                 Q.put(pixel, cost)
 
-#-------------------------
+
+# Build a a vector from a current point and some predecessors
+#------------------------------------------------------------
 def get_vector(current, predecessor):
     pixel = current
     plist = []
-    for i in range(25):
+    for i in range(bfactor):
         pixel = predecessor[pixel]
         plist.append(pixel)
     x = plist[0][1] - plist[-1][1]
@@ -125,7 +119,8 @@ def get_vector(current, predecessor):
     return [x/norm, y/norm]
 
 
-#-------------------------
+# Check whether a pixel is inside the image
+#-------------------------------------------
 def is_valid_pixel(img, pixel):
     y = pixel[0]
     x = pixel[1]
@@ -135,8 +130,8 @@ def is_valid_pixel(img, pixel):
     return False
 
 
-#Shows a path backwards, stating from sink
-#-----------------------------------------
+# Shows a path backwards, stating from the sink
+#----------------------------------------------
 def view_path(img, sink, predecessor, color):
     pred = predecessor[sink]
     while True:
@@ -146,7 +141,9 @@ def view_path(img, sink, predecessor, color):
         else:
             break
 
-#-------------------------------------
+
+# Check whether a sink is inside the current circle
+#--------------------------------------------------
 def sink_in_circle(sinks, center, radius):
     for s in sinks:
         if (s[0]-center[0])**2 + (s[1]-center[1])**2 <= radius**2:
@@ -162,8 +159,6 @@ def open_img(argv):
         sys.exit()
     else:
         return cv2.imread(argv[1])
-
-
 
 
 
